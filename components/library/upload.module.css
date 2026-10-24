@@ -1,0 +1,27 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--base-size-32);
+  background: color-mix(in srgb, var(--bgColor-default) 70%, transparent);
+  pointer-events: none;
+}
+
+.dropBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--base-size-12);
+  width: min(520px, 100%);
+  height: min(320px, 100%);
+  border: 2px dashed var(--borderColor-accent-emphasis);
+  border-radius: var(--borderRadius-large);
+  background: var(--bgColor-accent-muted);
+  color: var(--fgColor-accent);
+  font-size: var(--text-title-size-small);
+  font-weight: var(--base-text-weight-semibold);
+}

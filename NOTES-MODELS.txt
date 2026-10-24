@@ -1,0 +1,5 @@
+模型映射（中转站实际可用名）：
+- 导师：claude-sonnet-5-5（官转仅限客户端使用）
+- 工作台 ChatGPT：gpt-6-astra（codex pro）
+- 工作台 Claude：claude-opus-5-5（特惠渠道）
+- 工作台 Gemini：中转站没有「Gemini 4 Argon」，暂用 gemini-3.1-pro-preview（grok渠道claude）

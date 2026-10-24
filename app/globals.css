@@ -1,0 +1,38 @@
+/* Primer Primitives — design tokens (CSS custom properties).
+   These imports establish the token + theme baseline that every Primer
+   component and all of our own CSS reads from. Order matters: base + functional
+   tokens first, then the per-theme functional color sets. */
+@import '@primer/primitives/dist/css/base/size/size.css';
+@import '@primer/primitives/dist/css/base/typography/typography.css';
+@import '@primer/primitives/dist/css/base/motion/motion.css';
+@import '@primer/primitives/dist/css/functional/size/border.css';
+@import '@primer/primitives/dist/css/functional/size/radius.css';
+@import '@primer/primitives/dist/css/functional/size/breakpoints.css';
+@import '@primer/primitives/dist/css/functional/size/size-coarse.css';
+@import '@primer/primitives/dist/css/functional/size/size-fine.css';
+@import '@primer/primitives/dist/css/functional/size/size.css';
+@import '@primer/primitives/dist/css/functional/size/viewport.css';
+@import '@primer/primitives/dist/css/functional/typography/typography.css';
+
+@import '@primer/primitives/dist/css/functional/themes/light.css';
+@import '@primer/primitives/dist/css/functional/themes/dark.css';
+@import '@primer/primitives/dist/css/functional/themes/dark-dimmed.css';
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bgColor-muted);
+  color: var(--fgColor-default);
+  font-family: var(--fontStack-system, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif);
+}
+
+#__next {
+  min-height: 100vh;
+}

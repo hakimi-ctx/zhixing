@@ -1,0 +1,26 @@
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.design-cache/
+.v0-trash/
+.vercel/
+
+# Environment variables
+.env*.local
+
+# Common ignores
+node_modules
+.next/
+.DS_Store
+tsconfig.tsbuildinfo
+release/
+# Secrets / local config (never commit real keys)
+seed-config.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+config.local.json

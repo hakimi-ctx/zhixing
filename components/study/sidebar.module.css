@@ -1,0 +1,127 @@
+.tree {
+  padding-top: var(--base-size-2);
+}
+
+/* A paper's mind map or note that has not been created yet. */
+.pendingItem {
+  color: var(--fgColor-muted);
+}
+
+.count {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.failed {
+  color: var(--fgColor-danger);
+}
+
+.emptyActions {
+  padding: var(--base-size-4) var(--base-size-8);
+}
+
+/* ---------- Search ---------- */
+
+.searchStatus {
+  padding: var(--base-size-4) var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.snippet mark {
+  border-radius: var(--borderRadius-small);
+  background: var(--bgColor-attention-muted);
+  color: inherit;
+}
+
+.page {
+  flex-shrink: 0;
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+/* ---------- Literature search ---------- */
+
+.modeBar {
+  display: flex;
+  padding: var(--base-size-4) var(--base-size-8) 0;
+}
+
+.yearRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-4);
+  padding: var(--base-size-4) var(--base-size-8) var(--base-size-6);
+}
+
+.yearChip {
+  font-size: var(--text-body-size-small);
+}
+
+.litItem {
+  align-items: flex-start !important;
+}
+
+.litMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-6);
+  margin-top: var(--base-size-2);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.litActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-4);
+  margin-top: var(--base-size-4);
+}
+
+.litHint {
+  padding: var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  line-height: 1.5;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-8);
+  padding: var(--base-size-8);
+  border-top: 1px solid var(--borderColor-muted);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.litList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+  padding: 0 var(--base-size-8) var(--base-size-8);
+}
+
+.litCard {
+  padding: var(--base-size-8);
+  border: 1px solid var(--borderColor-muted);
+  border-radius: var(--borderRadius-medium);
+  background: var(--bgColor-muted);
+}
+
+.litTitle {
+  margin: 0;
+  font-size: var(--text-body-size-medium);
+  font-weight: 600;
+  line-height: 1.4;
+}

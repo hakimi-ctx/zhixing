@@ -1,0 +1,4 @@
+Supervisor-Skills
+Source: https://github.com/HKUSTDial/Supervisor-Skills (commit a20d76e)
+Copyright (c) 2026 Yuyu Luo (methodology) and contributors.
+License: CC BY-NC-SA 4.0 (see LICENSE). Bundled unmodified for personal, non-commercial use.

@@ -1,0 +1,408 @@
+.app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bgColor-muted);
+  color: var(--fgColor-default);
+}
+
+.app[data-resizing='true'] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Embedded PDFs would swallow the pointer while the sidebar is being resized. */
+.app[data-resizing='true'] iframe {
+  pointer-events: none;
+}
+
+.frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ---------- Ribbon ---------- */
+
+.rail {
+  flex-shrink: 0;
+  width: var(--base-size-48);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--base-size-4);
+  padding: var(--base-size-6) 0 var(--base-size-8);
+  border-right: 1px solid var(--borderColor-muted);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--base-size-28);
+  height: var(--base-size-28);
+  margin-bottom: var(--base-size-6);
+  border-radius: var(--borderRadius-medium);
+  background: var(--bgColor-emphasis);
+  color: var(--fgColor-onEmphasis);
+  font-size: var(--text-body-size-medium);
+  font-weight: var(--base-text-weight-semibold);
+  user-select: none;
+}
+
+.railItem[aria-current='page'] {
+  background: var(--bgColor-neutral-muted);
+  color: var(--fgColor-default);
+}
+
+.railSpacer {
+  flex: 1;
+}
+
+.railDivider {
+  flex-shrink: 0;
+  width: var(--base-size-20);
+  height: 1px;
+  margin: var(--base-size-4) 0;
+  background: var(--borderColor-default);
+}
+
+/* ---------- Sidebar ---------- */
+
+.sidebar {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--sidebar-width, 272px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--borderColor-muted);
+}
+
+.app[data-collapsed='true'] .sidebar {
+  display: none;
+}
+
+.resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 10;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.resizer:hover::after,
+.resizer[data-active='true']::after,
+.resizer:focus-visible::after {
+  background: var(--borderColor-accent-emphasis);
+}
+
+.resizer:focus-visible {
+  outline: none;
+}
+
+/* Same height as the tab bar, so the two bottom borders line up. */
+.sidebarHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-2);
+  height: var(--base-size-40);
+  padding: 0 var(--base-size-8);
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.viewToggles {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-2);
+}
+
+.viewToggle[aria-pressed='true'] {
+  background: var(--bgColor-neutral-muted);
+  color: var(--fgColor-default);
+}
+
+.sidebarView {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inactive views stay mounted (keeping filters, scroll and expanded folders) but hidden. */
+.sidebarView[hidden] {
+  display: none;
+}
+
+.pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.paneHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-4);
+  min-height: var(--base-size-36);
+  padding: var(--base-size-4) var(--base-size-6) 0 var(--base-size-12);
+}
+
+.paneTitle {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--base-size-6);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-muted);
+}
+
+.paneMeta {
+  font-weight: var(--base-text-weight-normal);
+}
+
+.paneActions {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-2);
+}
+
+.paneToolbar {
+  flex-shrink: 0;
+  padding: var(--base-size-4) var(--base-size-8) var(--base-size-8);
+}
+
+.paneBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--base-size-8) var(--base-size-16);
+}
+
+/* ---------- Work sidebar (sections inside one scroll area) ---------- */
+
+.modeButton {
+  font-size: var(--text-title-size-small);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.sidebarActions {
+  padding: var(--base-size-8) var(--base-size-12);
+}
+
+.sidebarScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--base-size-4) var(--base-size-8) var(--base-size-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-2);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-4);
+  min-height: var(--base-size-28);
+  padding: 0 var(--base-size-4) 0 var(--base-size-8);
+}
+
+.sectionTitle {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-muted);
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-2);
+}
+
+.emptyHint {
+  padding: var(--base-size-4) var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+/* ---------- Workspace ---------- */
+
+.workspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bgColor-default);
+}
+
+.backdrop {
+  display: none;
+}
+
+/* ---------- Status bar ---------- */
+
+.statusBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-16);
+  height: var(--base-size-24);
+  padding: 0 var(--base-size-12);
+  border-top: 1px solid var(--borderColor-muted);
+  font-size: var(--text-body-size-small);
+  line-height: 1;
+  color: var(--fgColor-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.statusGroup {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-12);
+}
+
+.statusItem,
+.statusLink {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4);
+  color: inherit;
+  text-decoration: none;
+}
+
+.statusLink {
+  height: var(--base-size-20);
+  padding: 0 var(--base-size-4);
+  margin: 0 calc(-1 * var(--base-size-4));
+  border-radius: var(--borderRadius-small);
+}
+
+.statusLink:hover {
+  color: var(--fgColor-default);
+  background: var(--bgColor-neutral-muted);
+}
+
+.statusText {
+  min-width: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusItem[data-tone='danger'],
+.statusLink[data-tone='danger'] {
+  color: var(--fgColor-danger);
+}
+
+.statusDot {
+  flex-shrink: 0;
+  color: var(--fgColor-success);
+}
+
+.statusLink[data-tone='attention'] .statusDot {
+  color: var(--fgColor-attention);
+}
+
+/* ---------- Narrow windows: the sidebar floats over the content ---------- */
+
+@media (max-width: 899px) {
+  .sidebar,
+  .app[data-collapsed='true'] .sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--base-size-48);
+    z-index: 30;
+    display: none;
+    width: min(var(--sidebar-width, 272px), calc(100vw - var(--base-size-64)));
+    background: var(--bgColor-muted);
+    box-shadow: var(--shadow-floating-medium);
+  }
+
+  .app[data-overlay='true'] .sidebar {
+    display: flex;
+  }
+
+  .app[data-overlay='true'] .backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: var(--bgColor-default);
+    opacity: 0.4;
+  }
+
+  .resizer {
+    display: none;
+  }
+}
+
+.quickOpen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+  min-width: 0;
+}
+
+.quickList {
+  max-height: min(420px, 50vh);
+  overflow-y: auto;
+}
+
+.quickEmpty,
+.quickHint {
+  font-size: var(--text-body-size-small);
+  line-height: var(--text-body-lineHeight-small);
+  color: var(--fgColor-muted);
+}
+
+.quickEmpty {
+  padding: var(--base-size-16) var(--base-size-8);
+  text-align: center;
+}

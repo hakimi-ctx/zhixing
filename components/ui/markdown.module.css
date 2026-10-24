@@ -1,0 +1,112 @@
+.markdown {
+  min-width: 0;
+  color: var(--fgColor-default);
+  font-size: var(--text-body-size-medium);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown :where(p, ul, ol, blockquote, pre, table) {
+  margin: 0 0 var(--base-size-12);
+}
+
+.markdown :where(h1, h2, h3, h4, h5, h6) {
+  margin: var(--base-size-20) 0 var(--base-size-8);
+  font-weight: var(--base-text-weight-semibold);
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.markdown h1 {
+  font-size: var(--text-title-size-medium);
+}
+
+.markdown h2 {
+  font-size: var(--text-title-size-small);
+}
+
+.markdown :where(h3, h4, h5, h6) {
+  font-size: var(--text-body-size-large);
+}
+
+.markdown :where(ul, ol) {
+  padding-left: var(--base-size-24);
+}
+
+.markdown li + li {
+  margin-top: var(--base-size-4);
+}
+
+.markdown li > :where(ul, ol) {
+  margin: var(--base-size-4) 0 0;
+}
+
+.markdown code {
+  padding: 0.15em 0.4em;
+  border-radius: var(--borderRadius-small);
+  background: var(--bgColor-neutral-muted);
+  font-family: var(--fontStack-monospace);
+  font-size: 0.875em;
+}
+
+.markdown pre {
+  padding: var(--base-size-12) var(--base-size-16);
+  border: 1px solid var(--borderColor-muted);
+  border-radius: var(--borderRadius-medium);
+  background: var(--bgColor-muted);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: var(--text-body-size-small);
+  line-height: 1.6;
+}
+
+.markdown blockquote {
+  padding: 0 var(--base-size-12);
+  border-left: 3px solid var(--borderColor-default);
+  color: var(--fgColor-muted);
+}
+
+.markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown :where(th, td) {
+  padding: var(--base-size-6) var(--base-size-12);
+  border: 1px solid var(--borderColor-default);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown th {
+  background: var(--bgColor-muted);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.markdown hr {
+  margin: var(--base-size-16) 0;
+  border: 0;
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.markdown a {
+  color: var(--fgColor-accent);
+}
+
+.markdown img {
+  max-width: 100%;
+}

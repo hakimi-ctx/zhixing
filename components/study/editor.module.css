@@ -1,0 +1,121 @@
+.editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.banner {
+  flex-shrink: 0;
+  padding: var(--base-size-12) var(--base-size-16) 0;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4);
+}
+
+.statusError {
+  color: var(--fgColor-danger);
+}
+
+.noteBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.noteInput {
+  flex: 1;
+  min-width: 0;
+  padding: var(--base-size-24) max(var(--base-size-24), calc((100% - 760px) / 2));
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--bgColor-default);
+  color: var(--fgColor-default);
+  font: inherit;
+  font-size: var(--text-body-size-large);
+  line-height: 1.8;
+}
+
+.notePreview {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--base-size-24) max(var(--base-size-24), calc((100% - 760px) / 2));
+}
+
+.noteBody[data-mode='split'] .noteInput,
+.noteBody[data-mode='split'] .notePreview {
+  padding: var(--base-size-24);
+}
+
+.noteBody[data-mode='split'] .noteInput {
+  border-right: 1px solid var(--borderColor-muted);
+}
+
+.noteBody[data-mode='split'] .notePreview {
+  background: var(--bgColor-muted);
+}
+
+.mindmap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--bgColor-default);
+}
+
+.mindmapCanvas {
+  position: absolute;
+  inset: 0;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--base-size-24);
+  background: var(--bgColor-default);
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  padding: var(--base-size-48) var(--base-size-16);
+}
+
+.message {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--base-size-24) var(--base-size-16);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--base-size-12);
+}
+
+.muted {
+  color: var(--fgColor-muted);
+  line-height: 1.6;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16);
+}
+
+@media (max-width: 899px) {
+  .noteBody[data-mode='split'] {
+    flex-direction: column;
+  }
+
+  .noteBody[data-mode='split'] .noteInput {
+    border-right: 0;
+    border-bottom: 1px solid var(--borderColor-muted);
+  }
+}

@@ -1,0 +1,242 @@
+.page {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: var(--base-size-24) var(--base-size-24) var(--base-size-48);
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-20);
+}
+
+.grow {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.banners {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+}
+
+/* ---------- AI overview ---------- */
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+  padding: var(--base-size-16);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-large);
+  background: var(--bgColor-default);
+}
+
+.overviewHeader {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--base-size-8);
+}
+
+.overviewTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-6);
+  font-size: var(--text-body-size-medium);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.overviewIcon {
+  color: var(--fgColor-done);
+}
+
+.overviewMeta {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.overviewBody {
+  position: relative;
+}
+
+.overviewBody[data-clamped='true'] {
+  max-height: 10.5em;
+  overflow: hidden;
+}
+
+.overviewFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-8);
+}
+
+/* ---------- Toolbar ---------- */
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12);
+}
+
+.toolbarRow {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.filter {
+  flex: 1;
+  min-width: 0;
+}
+
+.topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-6);
+}
+
+/* ---------- Paper list ---------- */
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-24);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+}
+
+.groupHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-2);
+  padding: 0 var(--base-size-4);
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  font-size: var(--text-body-size-medium);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.groupDescription {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-large);
+  background: var(--bgColor-default);
+  list-style: none;
+  overflow: hidden;
+}
+
+.paper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+  padding: var(--base-size-12) var(--base-size-16);
+}
+
+.paper + .paper {
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.paperHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--base-size-8);
+}
+
+.paperTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-body-size-large);
+  font-weight: var(--base-text-weight-semibold);
+  line-height: var(--text-body-lineHeight-large);
+  color: var(--fgColor-default);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.paperTitle:hover {
+  color: var(--fgColor-accent);
+  text-decoration: underline;
+}
+
+.statusLabel {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4);
+  margin-top: var(--base-size-2);
+}
+
+.statusSpinner {
+  width: var(--base-size-12);
+  height: var(--base-size-12);
+}
+
+.paperMeta {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.paperSummary {
+  font-size: var(--text-body-size-medium);
+  line-height: var(--text-body-lineHeight-medium);
+  color: var(--fgColor-default);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-4);
+}
+
+.paperActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--base-size-4);
+  margin-left: calc(-1 * var(--base-size-4));
+}
+
+.paperActionsEnd {
+  margin-left: auto;
+}
+
+.empty {
+  padding: var(--base-size-24) 0;
+  text-align: center;
+  font-size: var(--text-body-size-medium);
+  color: var(--fgColor-muted);
+}
+
+.center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--base-size-48);
+}
+
+@media (max-width: 599px) {
+  .page {
+    padding: var(--base-size-16) var(--base-size-12) var(--base-size-32);
+  }
+}

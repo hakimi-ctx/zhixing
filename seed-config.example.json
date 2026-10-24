@@ -1,0 +1,63 @@
+﻿{
+  "version": 2,
+  "vaultPath": "",
+  "proxy": "",
+  "relay": {
+    "baseUrl": "",
+    "apiKey": ""
+  },
+  "providers": {
+    "chatgpt": {
+      "enabled": true,
+      "model": "gpt-6-astra",
+      "baseUrl": "",
+      "apiKey": ""
+    },
+    "claude": {
+      "enabled": true,
+      "model": "claude-opus-5-5",
+      "baseUrl": "",
+      "apiKey": ""
+    },
+    "gemini": {
+      "enabled": true,
+      "model": "gemini-3.1-pro-preview",
+      "baseUrl": "",
+      "apiKey": ""
+    }
+  },
+  "study": {
+    "provider": "claude",
+    "model": "claude-sonnet-5-5",
+    "baseUrl": "",
+    "apiKey": ""
+  },
+  "work": {
+    "supervisor": "chatgpt",
+    "maxSubtasks": 3,
+    "maxRevisions": 1,
+    "callTimeoutSec": 600
+  },
+  "executors": [
+    {
+      "id": "workbuddy",
+      "kind": "workbuddy",
+      "name": "WorkBuddy",
+      "enabled": true,
+      "command": "PLACEHOLDER_WORKBUDDY",
+      "args": "--print --dangerously-skip-permissions {prompt}",
+      "promptVia": "stdin",
+      "timeoutMin": 30
+    },
+    {
+      "id": "deepseek-harness",
+      "kind": "deepseek-harness",
+      "name": "DeepSeek Harness",
+      "enabled": true,
+      "command": "PLACEHOLDER_DEEPSEEK",
+      "args": "--profile headless {prompt}",
+      "promptVia": "stdin",
+      "timeoutMin": 30
+    }
+  ]
+}
