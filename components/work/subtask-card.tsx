@@ -6,7 +6,8 @@ import { ChevronDownIcon, ChevronRightIcon } from '@primer/octicons-react'
 import { Markdown } from '@/components/ui/markdown'
 import { ProviderMark } from '@/components/ui/provider-mark'
 import { formatDuration } from '@/lib/client/format'
-import { PROVIDER_META } from '@/lib/shared/providers'
+import { useConfig } from '@/lib/client/hooks'
+import { providerLabel } from '@/lib/shared/providers'
 import type { WorkAttempt, WorkSubtask } from '@/lib/shared/types'
 import { StepLabel } from './status-label'
 import styles from './work.module.css'
@@ -34,7 +35,8 @@ function elapsed(attempt: WorkAttempt): string | null {
 }
 
 function AttemptBody({ attempt }: { attempt: WorkAttempt }) {
-  const who = PROVIDER_META[attempt.by].label
+  const { data: config } = useConfig()
+  const who = providerLabel(attempt.by, config?.providers)
   if (attempt.status === 'running' && !attempt.output) {
     return (
       <div className={styles.meta} role="status">
@@ -52,6 +54,7 @@ function AttemptBody({ attempt }: { attempt: WorkAttempt }) {
 
 export function SubtaskCard({ subtask, index }: { subtask: WorkSubtask; index: number }) {
   const [showSpec, setShowSpec] = useState(false)
+  const { data: config } = useConfig()
   const { attempts } = subtask
   const latest = attempts[attempts.length - 1]
   let shown: WorkAttempt | undefined = latest
@@ -65,6 +68,7 @@ export function SubtaskCard({ subtask, index }: { subtask: WorkSubtask; index: n
   }
   const earlier = attempts.filter((attempt) => attempt !== shown)
   const by = shown?.by ?? subtask.assignee
+  const byName = providerLabel(by, config?.providers)
   const time = shown ? elapsed(shown) : null
   const titleId = `subtask-${subtask.id}`
 
@@ -77,8 +81,8 @@ export function SubtaskCard({ subtask, index }: { subtask: WorkSubtask; index: n
         </h3>
         <div className={styles.meta}>
           <span className={styles.inline}>
-            <ProviderMark provider={by} />
-            {PROVIDER_META[by].label}
+            <ProviderMark provider={by} label={byName} />
+            {byName}
           </span>
           {shown?.model ? <span>{shown.model}</span> : null}
           {time ? <span>{time}</span> : null}
@@ -135,8 +139,8 @@ export function SubtaskCard({ subtask, index }: { subtask: WorkSubtask; index: n
               <div key={`${attempt.startedAt ?? position}-${attempt.by}`} className={styles.stack}>
                 <div className={styles.meta}>
                   <span className={styles.inline}>
-                    <ProviderMark provider={attempt.by} />
-                    {PROVIDER_META[attempt.by].label}
+                    <ProviderMark provider={attempt.by} label={providerLabel(attempt.by, config?.providers)} />
+                    {providerLabel(attempt.by, config?.providers)}
                   </span>
                   <StepLabel status={attempt.status} error={attempt.error} />
                   {attempt.note ? <span>{attempt.note}</span> : null}

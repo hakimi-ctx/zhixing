@@ -6,8 +6,8 @@ import { HttpError, errorMessage, readBody, route } from '@/lib/server/http'
 import { callModel, isAbortError, type ModelRequest } from '@/lib/server/llm'
 import { newId } from '@/lib/server/store'
 import { buildTutorRequest, chooseSkill } from '@/lib/server/tutor'
-import { PROVIDER_META } from '@/lib/shared/providers'
-import type { ChatMessage, ChatMessageMeta, ChatSource, ChatStreamEvent, Conversation, ProviderId } from '@/lib/shared/types'
+import { providerLabel } from '@/lib/shared/providers'
+import type { AppConfig, ChatMessage, ChatMessageMeta, ChatSource, ChatStreamEvent, Conversation, ProviderId } from '@/lib/shared/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +16,12 @@ const schema = z.object({
   conversationId: z.string().max(64).optional(),
   message: z.string().max(200_000).optional(),
   regenerate: z.boolean().optional(),
-  provider: z.enum(['chatgpt', 'claude', 'gemini']),
+  provider: z
+    .string()
+    .trim()
+    .min(1, '请先选择一个模型')
+    .max(64)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, '请先选择一个模型'),
   skill: z.string().max(64),
   attachment: z.string().max(1000).nullable().optional(),
   /** Use the paper library as the tutor's knowledge base (default on). */
@@ -38,6 +43,24 @@ async function appendReply(conversationId: string, message: ChatMessage, skill: 
   return updated !== null
 }
 
+/** Mentor can use study.model / baseUrl / apiKey while Work keeps the slot's own model. */
+function applyStudyOverride(config: AppConfig, provider: string): AppConfig {
+  if (provider !== config.study.provider) return config
+  if (!config.study.model && !config.study.apiKey && !config.study.baseUrl) return config
+  return {
+    ...config,
+    providers: config.providers.map((slot) => {
+      if (slot.id !== provider) return slot
+      return {
+        ...slot,
+        model: config.study.model || slot.model,
+        baseUrl: slot.connection === 'api' && config.study.baseUrl ? config.study.baseUrl : slot.baseUrl,
+        apiKey: slot.connection === 'api' && config.study.apiKey ? config.study.apiKey : slot.apiKey,
+      }
+    }),
+  }
+}
+
 /**
  * Streams one tutor reply as NDJSON. The model call is tied to the run (not the HTTP request),
  * so closing the page does not lose the answer: it is still saved to the conversation.
@@ -50,17 +73,11 @@ export const POST = route(async (req) => {
   if (regenerate && !body.conversationId) throw new HttpError(400, '重新回答需要指定对话。')
 
   const provider: ProviderId = body.provider
-  const config = await loadConfig()
-  // Mentor can use study.model/apiKey/baseUrl (e.g. Sonnet) while Work keeps providers.claude as Opus.
-  if (config.study.model || config.study.apiKey || config.study.baseUrl) {
-    if (provider === config.study.provider) {
-      if (config.study.model) config.providers[provider] = { ...config.providers[provider], model: config.study.model }
-      if (config.study.baseUrl) config.providers[provider] = { ...config.providers[provider], baseUrl: config.study.baseUrl }
-      if (config.study.apiKey) config.providers[provider] = { ...config.providers[provider], apiKey: config.study.apiKey }
-    }
-  }
-  if (!config.providers[provider].enabled) {
-    throw new HttpError(400, `${PROVIDER_META[provider].label} 已在设置里停用，请换一个模型。`)
+  const config = applyStudyOverride(await loadConfig(), provider)
+  const slot = config.providers.find((item) => item.id === provider)
+  if (!slot) throw new HttpError(400, '找不到这个模型槽位。请到设置里添加，或换一个模型。')
+  if (!slot.enabled) {
+    throw new HttpError(400, `${providerLabel(provider, config.providers)} 已在设置里停用，请换一个模型。`)
   }
 
   const now = Date.now()
@@ -156,7 +173,7 @@ export const POST = route(async (req) => {
     let partial = ''
     const baseMeta = (): ChatMessageMeta => ({ provider, skill, durationMs: Date.now() - startedAt })
     send({ type: 'start', conversationId, title, userMessage, skill })
-    send({ type: 'status', text: `正在请 ${PROVIDER_META[provider].label} 思考…` })
+    send({ type: 'status', text: `正在请 ${providerLabel(provider, config.providers)} 思考…` })
     try {
       const result = await callModel({
         provider,

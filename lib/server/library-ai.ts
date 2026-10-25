@@ -1,5 +1,5 @@
 import 'server-only'
-import { PROVIDER_IDS, type AppConfig, type LibraryInsights, type Paper, type PaperCard, type ProviderId } from '@/lib/shared/types'
+import type { AppConfig, LibraryInsights, Paper, PaperCard, ProviderId } from '@/lib/shared/types'
 import { providerReady } from './config'
 import { extractJsonObject } from './json-extract'
 import { normalizeCard, normalizeYear, RELATION_TYPES } from './library'
@@ -8,7 +8,7 @@ import { callModel } from './llm'
 /** The tutor's model manages the library; any other ready model is the fallback. */
 export function libraryProvider(config: AppConfig): ProviderId | null {
   if (providerReady(config, config.study.provider)) return config.study.provider
-  return PROVIDER_IDS.find((id) => providerReady(config, id)) ?? null
+  return config.providers.find((slot) => providerReady(config, slot.id))?.id ?? null
 }
 
 async function askJson(config: AppConfig, provider: ProviderId, system: string, user: string, timeoutMs: number) {

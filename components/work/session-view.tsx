@@ -13,9 +13,9 @@ import { useNotice } from '@/components/ui/notices'
 import { ProviderMark } from '@/components/ui/provider-mark'
 import { api, errorText } from '@/lib/client/api'
 import { clockTime } from '@/lib/client/format'
-import { KEYS, useWorkSession } from '@/lib/client/hooks'
+import { KEYS, useConfig, useWorkSession } from '@/lib/client/hooks'
 import { saveTextAsNote } from '@/lib/client/notes'
-import { PROVIDER_META } from '@/lib/shared/providers'
+import { providerLabel } from '@/lib/shared/providers'
 import type { WorkPhase, WorkSession } from '@/lib/shared/types'
 import { ExecutePanel } from './execute-panel'
 import { StepLabel } from './status-label'
@@ -97,9 +97,15 @@ function Working({ children }: { children: React.ReactNode }) {
   )
 }
 
+function useSlotName() {
+  const { data: config } = useConfig()
+  return (id: string) => providerLabel(id, config?.providers)
+}
+
 function PlanBody({ session }: { session: WorkSession }) {
+  const name = useSlotName()
   const { plan } = session
-  const supervisor = PROVIDER_META[session.supervisor].label
+  const supervisor = name(session.supervisor)
   if (plan.status === 'running') return <Working>{supervisor} 正在分析任务、安排分工…</Working>
   if (plan.status === 'done') {
     return (
@@ -108,7 +114,7 @@ function PlanBody({ session }: { session: WorkSession }) {
         <div className={styles.meta}>
           {plan.model ? <span>{plan.model}</span> : null}
           <span>
-            成员：{session.workers.length ? session.workers.map((id) => PROVIDER_META[id].label).join('、') : '无，由主管独自完成'}
+            成员：{session.workers.length ? session.workers.map((id) => name(id)).join('、') : '无，由主管独自完成'}
           </span>
         </div>
       </div>
@@ -131,6 +137,7 @@ function PlanBody({ session }: { session: WorkSession }) {
 }
 
 function ReviewBody({ session }: { session: WorkSession }) {
+  const name = useSlotName()
   const { review } = session
   const titleOf = (id: string) => session.subtasks.find((subtask) => subtask.id === id)?.title ?? id
   const requested = review.requested?.length ? (
@@ -151,7 +158,7 @@ function ReviewBody({ session }: { session: WorkSession }) {
         {requested}
       </div>
     ) : (
-      <Working>{PROVIDER_META[session.supervisor].label} 正在逐项检查成员的交付…</Working>
+      <Working>{name(session.supervisor)} 正在逐项检查成员的交付…</Working>
     )
   }
   if (review.status === 'done') {
@@ -170,12 +177,13 @@ function ReviewBody({ session }: { session: WorkSession }) {
 }
 
 function FinalBody({ session }: { session: WorkSession }) {
+  const name = useSlotName()
   const { final } = session
   if (final.status === 'running') {
     return (
       <div className={styles.stack}>
         {final.output ? <Markdown>{final.output}</Markdown> : null}
-        <Working>{PROVIDER_META[session.supervisor].label} 正在汇总最终方案…</Working>
+        <Working>{name(session.supervisor)} 正在汇总最终方案…</Working>
       </div>
     )
   }
@@ -220,6 +228,7 @@ export function SessionView({ id }: { id: string }) {
   const { data: session, error, mutate } = useWorkSession(id)
   const [acting, setActing] = useState<'stop' | 'resume' | null>(null)
   const [savingNote, setSavingNote] = useState(false)
+  const name = useSlotName()
 
   const refresh = () => {
     void mutate()
@@ -262,7 +271,7 @@ export function SessionView({ id }: { id: string }) {
     )
   }
 
-  const supervisor = PROVIDER_META[session.supervisor].label
+  const supervisor = name(session.supervisor)
   const running = session.status === 'running'
   const resumable = session.status === 'failed' || session.status === 'stopped'
   const reviewStatus = session.review.status
@@ -292,7 +301,7 @@ export function SessionView({ id }: { id: string }) {
       meta={
         <>
           <span className={styles.inline}>
-            <ProviderMark provider={session.supervisor} />
+            <ProviderMark provider={session.supervisor} label={supervisor} />
             主管 {supervisor}
           </span>
           <span>已调用 {session.calls} 次</span>
@@ -326,7 +335,7 @@ export function SessionView({ id }: { id: string }) {
 
         <Card
           title="主管拆解"
-          leading={<ProviderMark provider={session.supervisor} size={20} />}
+          leading={<ProviderMark provider={session.supervisor} label={supervisor} size={20} />}
           description={`${supervisor} 负责拆解、验收和汇总`}
           actions={<StepLabel status={session.plan.status} error={session.plan.error} />}
         >
