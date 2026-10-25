@@ -1,10 +1,13 @@
-﻿import type { NextConfig } from 'next'
+﻿import path from 'node:path'
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Hide Next.js Dev Tools overlay (English-only UI) for end users.
   devIndicators: false,
-  // Local Windows install: skip standalone tracing (hits EPERM on profile junctions under Cursor local-exec).
+  // pack:win (electron-builder) copies .next/standalone; pin tracing to this repo root.
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname),
   compiler: {
     styledComponents: true,
   },
@@ -26,4 +29,3 @@ const nextConfig: NextConfig = {
 }
 
 export default nextConfig
-

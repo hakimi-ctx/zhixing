@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { HttpError, json, readBody, route } from '@/lib/server/http'
 import { formatCitation } from '@/lib/server/literature'
 import { createEntry } from '@/lib/server/vault'
-import { HttpError } from '@/lib/server/http'
 import type { LiteratureWork } from '@/lib/shared/types'
 
 export const dynamic = 'force-dynamic'
