@@ -7,7 +7,13 @@ export const dynamic = 'force-dynamic'
 const schema = z.object({
   baseUrl: z.string().trim().max(500).optional(),
   apiKey: z.string().trim().max(1000).optional(),
-  provider: z.enum(['chatgpt', 'claude', 'gemini']).optional(),
+  provider: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
+    .optional(),
 })
 
 /** POST so unsaved form values (including a freshly typed key) never end up in a URL. */

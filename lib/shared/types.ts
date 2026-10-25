@@ -1,21 +1,51 @@
 export type AppMode = 'study' | 'work'
 
-export type ProviderId = 'chatgpt' | 'claude' | 'gemini'
-export const PROVIDER_IDS: readonly ProviderId[] = ['chatgpt', 'claude', 'gemini']
+/**
+ * Stable id of one AI slot. Legacy installs used `chatgpt` | `claude` | `gemini`;
+ * slots added in the UI get ids like `s1a2b3c4`.
+ */
+export type ProviderId = string
 
-/** One OpenAI-compatible relay ("中转站") shared by all three models. */
+/** The three providers stored by config version 1 and 2. Migration keeps these ids. */
+export const LEGACY_PROVIDER_IDS = ['chatgpt', 'claude', 'gemini'] as const
+export type LegacyProviderId = (typeof LEGACY_PROVIDER_IDS)[number]
+
+export type ConnectionMode = 'api' | 'cli'
+export const CONNECTION_MODES = ['api', 'cli'] as const
+
+/** Upper bound for the settings list. Enough for a personal setup, small enough to keep the work team readable. */
+export const MAX_AI_SLOTS = 12
+
+/** One OpenAI-compatible relay ("中转站"). API slots with an empty base URL use it. */
 export interface RelayConfig {
   baseUrl: string
   /** Masked (e.g. "••••abcd") when sent to the browser. */
   apiKey: string
 }
 
-export interface ProviderConfig {
+/**
+ * One model the user can call. `api` talks to an OpenAI-compatible HTTP relay;
+ * `cli` runs a local command and treats stdout as the reply.
+ */
+export interface AiSlot {
+  id: ProviderId
+  label: string
   enabled: boolean
+  connection: ConnectionMode
+  /** API: model id sent to the relay. CLI: optional, substituted for `{model}` in args. */
   model: string
-  /** Optional per-model relay. Empty means "use the shared relay". */
+  /** API only. Empty means "use the shared relay". */
   baseUrl: string
   apiKey: string
+  /** CLI executable name or path. Ignored for API slots. */
+  command: string
+  /**
+   * CLI argument template. `{prompt}` is replaced by the prompt (short prompts only);
+   * `{model}` by the model field. When `{prompt}` is absent, the prompt is written to stdin.
+   */
+  args: string
+  /** Optional note shown to the work supervisor when assigning subtasks. */
+  note: string
 }
 
 export interface WorkRules {
@@ -42,12 +72,13 @@ export interface ExecutorConfig {
 }
 
 export interface AppConfig {
-  version: 2
+  version: 3
   vaultPath: string
-  /** Optional HTTP(S) proxy for relay calls and executors, e.g. http://127.0.0.1:7890. */
+  /** Optional HTTP(S) proxy for relay calls, CLI slots, and executors, e.g. http://127.0.0.1:7890. */
   proxy: string
   relay: RelayConfig
-  providers: Record<ProviderId, ProviderConfig>
+  /** Free-form model slots. Order is the order shown in settings and on the work team. */
+  providers: AiSlot[]
   study: { provider: ProviderId; model?: string; baseUrl?: string; apiKey?: string }
   work: WorkRules
   executors: ExecutorConfig[]

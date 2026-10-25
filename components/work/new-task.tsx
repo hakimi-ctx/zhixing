@@ -11,8 +11,7 @@ import { ProviderMark } from '@/components/ui/provider-mark'
 import { api, errorText } from '@/lib/client/api'
 import { providerReady } from '@/lib/client/config'
 import { KEYS, useConfig, useSystem } from '@/lib/client/hooks'
-import { PROVIDER_META } from '@/lib/shared/providers'
-import { PROVIDER_IDS, type ProviderId } from '@/lib/shared/types'
+import { providerLabel, providerStrength } from '@/lib/shared/providers'
 import styles from './work.module.css'
 
 const EXAMPLES = [
@@ -29,12 +28,9 @@ export function NewTask() {
   const [task, setTask] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const enabled = PROVIDER_IDS.filter((id) => config?.providers[id].enabled ?? true)
-  const supervisor: ProviderId | undefined = config
-    ? enabled.includes(config.work.supervisor)
-      ? config.work.supervisor
-      : enabled[0]
-    : 'chatgpt'
+  const slots = config?.providers ?? []
+  const enabled = slots.filter((slot) => slot.enabled).map((slot) => slot.id)
+  const supervisor = config ? (enabled.includes(config.work.supervisor) ? config.work.supervisor : enabled[0]) : slots[0]?.id
   const rules = config?.work
 
   const submit = async () => {
@@ -44,8 +40,8 @@ export function NewTask() {
       return
     }
     if (submitting) return
-    if (config && !PROVIDER_IDS.some((id) => providerReady(config, id))) {
-      notify({ variant: 'danger', text: '还没有可用的模型。请先到设置里接入中转站并填好模型名。' })
+    if (config && !config.providers.some((slot) => providerReady(config, slot.id))) {
+      notify({ variant: 'danger', text: '还没有可用的模型。请先到设置里添加槽位：API 要填中转站和模型名，CLI 要填命令。' })
       return
     }
     setSubmitting(true)
@@ -64,7 +60,7 @@ export function NewTask() {
       <div className={styles.hero}>
         <h2 className={styles.heroTitle}>把任务交给 AI 团队</h2>
         <p className={styles.muted}>
-          三个模型按上下级分工：主管拆解任务、分派给成员，成员各做一块，主管验收后汇总成可以直接执行的方案。返工轮数和调用次数都有上限，不会互相空转。
+          已启用的模型按上下级分工：主管拆解任务、分派给其他槽位，各做一块，主管验收后汇总成可以直接执行的方案。返工轮数和调用次数都有上限，不会互相空转。
         </p>
       </div>
 
@@ -72,7 +68,7 @@ export function NewTask() {
         <Banner
           variant="info"
           title="你正在 v0 预览中"
-          description="预览里没有你电脑上的会员命令行工具，三家模型会自动改走“内置通道”，可以先体验完整流程。"
+          description="预览里没有你电脑上的命令行工具。模型仍走设置里的 API；CLI 槽位在预览里通常不可用。"
         />
       ) : null}
 
@@ -100,21 +96,24 @@ export function NewTask() {
       </ol>
 
       <div className={styles.team} aria-label="团队成员">
-        {PROVIDER_IDS.map((id) => {
-          const provider = config?.providers[id]
-          const on = provider?.enabled ?? true
-          const role = !on ? '已停用' : id === supervisor ? '主管' : '成员'
+        {slots.length === 0 ? <p className={styles.small}>还没有模型槽位。请到设置里添加。</p> : null}
+        {slots.map((slot) => {
+          const on = slot.enabled
+          const role = !on ? '已停用' : slot.id === supervisor ? '主管' : '成员'
+          const detail = slot.connection === 'cli' ? slot.model || slot.command : slot.model
           return (
-            <div key={id} className={styles.member} data-off={!on}>
+            <div key={slot.id} className={styles.member} data-off={!on}>
               <div className={styles.memberHead}>
                 <span className={styles.memberName}>
-                  <ProviderMark provider={id} size={18} />
-                  {PROVIDER_META[id].label}
+                  <ProviderMark provider={slot.id} label={slot.label} size={18} />
+                  {providerLabel(slot.id, slots)}
                 </span>
                 <Label variant={role === '主管' ? 'accent' : 'secondary'}>{role}</Label>
               </div>
-              <span className={styles.small}>擅长{PROVIDER_META[id].strengths}</span>
-              {provider && on && provider.model ? <span className={styles.small}>{provider.model}</span> : null}
+              <span className={styles.small}>
+                {slot.connection === 'cli' ? 'CLI · ' : 'API · '}擅长{providerStrength(slot)}
+              </span>
+              {on && detail ? <span className={styles.small}>{detail}</span> : null}
             </div>
           )
         })}

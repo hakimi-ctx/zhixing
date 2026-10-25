@@ -1,9 +1,10 @@
 import 'server-only'
+import os from 'node:os'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { streamText, type ModelMessage as SdkMessage } from 'ai'
-import { PROVIDER_META } from '@/lib/shared/providers'
-import type { AppConfig, ConnectionTestResult, ProviderId } from '@/lib/shared/types'
-import { loadConfig, resolveKey, routeFor, type ModelRoute } from './config'
+import type { AiSlot, AppConfig, ConnectionTestResult, ProviderId } from '@/lib/shared/types'
+import { findSlot, loadConfig, resolveKey, routeFor, type ModelRoute } from './config'
+import { childEnv, cleanOutput, expandTemplate, resolveCommand, runProcess, tailLines, templateUses } from './process'
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -149,19 +150,82 @@ function describeError(error: unknown, model: string): string {
   return value?.message || '调用模型失败'
 }
 
-function routeError(config: AppConfig, provider: ProviderId, route: ModelRoute): string | null {
-  const label = PROVIDER_META[provider].label
-  if (!config.providers[provider].enabled) return `${label} 已在设置里停用。`
-  if (!route.baseUrl || !route.apiKey) return '还没有接入中转站。请到设置里填写接口地址和 API Key。'
-  if (!route.model) return `还没有给 ${label} 选模型。请到设置里填写模型名。`
+function routeError(slot: AiSlot, route: ModelRoute): string | null {
+  if (!route.baseUrl || !route.apiKey) return '还没有接入中转站。请到设置里填写接口地址和 API Key，或给这个槽位单独填写。'
+  if (!route.model) return `还没有给 ${slot.label} 选模型。请到设置里填写模型名。`
   return null
 }
 
-/** Streams one reply from a provider through its relay. */
-export async function callModel(options: CallOptions): Promise<CallResult> {
-  const config = options.config ?? (await loadConfig())
-  const route = routeFor(config, options.provider)
-  const problem = routeError(config, options.provider, route)
+/** Short prompts may go in `{prompt}`; longer ones are written to stdin so the command line stays within OS limits. */
+const PROMPT_ARG_LIMIT = 8_000
+
+function renderCliPrompt(request: ModelRequest): string {
+  const fitted = fitRequest(request, REQUEST_BUDGET)
+  const blocks = [fitted.system]
+  if (fitted.reference?.trim()) blocks.push(`<参考资料>\n${fitted.reference.trim()}\n</参考资料>`)
+  for (const turn of fitted.messages) {
+    blocks.push(`${turn.role === 'user' ? '用户' : '助手'}：\n${turn.content}`)
+  }
+  return blocks.join('\n\n')
+}
+
+async function callCli(slot: AiSlot, options: CallOptions, config: AppConfig): Promise<CallResult> {
+  const command = slot.command.trim()
+  if (!command) throw new ModelCallError(`${slot.label}：还没有填写 CLI 命令。`)
+  const resolved = await resolveCommand(command)
+  if (!resolved) throw new ModelCallError(`${slot.label}：找不到命令“${command}”。请确认已安装，或在设置里填写完整路径。`)
+  if (options.signal?.aborted) throw abortError()
+
+  const prompt = renderCliPrompt(options.request)
+  const wantsArg = templateUses(slot.args, 'prompt')
+  const promptInArg = wantsArg && prompt.length <= PROMPT_ARG_LIMIT
+  const args = expandTemplate(slot.args, {
+    prompt: promptInArg ? prompt : wantsArg ? '完整提示在标准输入。' : '',
+    model: slot.model,
+  })
+  const shownModel = slot.model || command
+  const timeoutMs = options.timeoutMs ?? config.work.callTimeoutSec * 1000
+  options.onStatus?.(`正在调用 ${slot.label}（${shownModel}）…`)
+
+  let streamed = ''
+  const result = await runProcess({
+    command: resolved,
+    args,
+    cwd: os.homedir(),
+    stdin: promptInArg ? undefined : prompt,
+    timeoutMs,
+    signal: options.signal,
+    env: childEnv({ proxy: config.proxy }),
+    onOutput: (chunk, stream) => {
+      if (stream !== 'stdout' || !chunk) return
+      const text = cleanOutput(chunk)
+      if (!text) return
+      streamed += text
+      options.onDelta?.(text)
+    },
+  })
+  if (options.signal?.aborted || result.aborted) throw abortError()
+  const fail = (message: string): never => {
+    if (streamed) options.onReset?.()
+    throw new ModelCallError(`${slot.label}：${message}`)
+  }
+  if (result.spawnError) fail(result.spawnError)
+  if (result.timedOut) fail('等待命令响应超时。')
+  const text = result.stdout.trim()
+  if (result.exitCode !== 0) {
+    const detail = tailLines(result.stderr || result.stdout)
+    fail(`命令退出码 ${result.exitCode ?? '未知'}${detail ? `\n${detail}` : ''}`)
+  }
+  if (!text) {
+    const detail = tailLines(result.stderr)
+    fail(`命令没有返回内容。请确认它把回复写到标准输出。${detail ? `\n${detail}` : ''}`)
+  }
+  return { text, model: shownModel }
+}
+
+async function callApi(slot: AiSlot, options: CallOptions, config: AppConfig): Promise<CallResult> {
+  const route = routeFor(config, slot.id)
+  const problem = routeError(slot, route)
   if (problem) throw new ModelCallError(problem)
   if (options.signal?.aborted) throw abortError()
 
@@ -172,10 +236,10 @@ export async function callModel(options: CallOptions): Promise<CallResult> {
     throw new ModelCallError(error instanceof Error ? error.message : String(error))
   }
   const timeoutMs = options.timeoutMs ?? config.work.callTimeoutSec * 1000
-  options.onStatus?.(`正在调用 ${PROVIDER_META[options.provider].label}（${route.model}）…`)
+  options.onStatus?.(`正在调用 ${slot.label}（${route.model}）…`)
 
   const relay = createOpenAICompatible({
-    name: `zhixing-${options.provider}`,
+    name: `zhixing-${slot.id}`,
     baseURL,
     apiKey: route.apiKey,
     fetch: await fetchFor(config.proxy),
@@ -214,23 +278,38 @@ export async function callModel(options: CallOptions): Promise<CallResult> {
   } catch (error) {
     if (options.signal?.aborted) throw abortError()
     if (text) options.onReset?.()
-    throw new ModelCallError(`${PROVIDER_META[options.provider].label}：${describeError(error, route.model)}`)
+    throw new ModelCallError(`${slot.label}：${describeError(error, route.model)}`)
   }
   if (options.signal?.aborted) throw abortError()
   if (!text.trim()) {
-    throw new ModelCallError(`${PROVIDER_META[options.provider].label}：模型没有返回任何内容。`)
+    throw new ModelCallError(`${slot.label}：模型没有返回任何内容。`)
   }
   return { text: text.trim(), model: route.model }
+}
+
+/** Streams one reply from a slot: an OpenAI-compatible relay, or a local CLI's stdout. */
+export async function callModel(options: CallOptions): Promise<CallResult> {
+  const config = options.config ?? (await loadConfig())
+  const slot = findSlot(config, options.provider)
+  if (!slot) throw new ModelCallError('找不到这个模型槽位。请到设置里检查。')
+  if (!slot.enabled) throw new ModelCallError(`${slot.label} 已在设置里停用。`)
+  if (slot.connection === 'cli') return callCli(slot, options, config)
+  return callApi(slot, options, config)
 }
 
 export async function testConnection(provider: ProviderId): Promise<ConnectionTestResult> {
   const started = Date.now()
   const config = await loadConfig()
-  const model = config.providers[provider].model
+  const slot = findSlot(config, provider)
+  if (!slot) return { ok: false, model: '', error: '找不到这个模型槽位。请先保存设置。', ms: Date.now() - started }
+  const model = slot.connection === 'cli' ? slot.model || slot.command : slot.model
   try {
     const result = await callModel({
       provider,
-      config: { ...config, providers: { ...config.providers, [provider]: { ...config.providers[provider], enabled: true } } },
+      config: {
+        ...config,
+        providers: config.providers.map((item) => (item.id === provider ? { ...item, enabled: true } : item)),
+      },
       timeoutMs: 90_000,
       request: {
         system: '你正在接受连通性测试。',
@@ -246,7 +325,9 @@ export async function testConnection(provider: ProviderId): Promise<ConnectionTe
 /** Reads the relay's model list (GET /models). Unsaved form values can be passed; a masked key falls back to the stored one. */
 export async function listModels(input: { baseUrl?: string; apiKey?: string; provider?: ProviderId }): Promise<string[]> {
   const config = await loadConfig()
-  const stored = input.provider ? routeFor(config, input.provider) : config.relay
+  const slot = input.provider ? findSlot(config, input.provider) : undefined
+  if (slot?.connection === 'cli') throw new RelaySetupError('CLI 槽位没有模型列表。模型名是可选项，写在槽位里即可。')
+  const stored = slot ? routeFor(config, slot.id) : config.relay
   const baseUrl = input.baseUrl?.trim() || stored.baseUrl
   const apiKey = resolveKey(input.apiKey, stored.apiKey)
   if (!baseUrl || !apiKey) throw new RelaySetupError('先填写接口地址和 API Key。')

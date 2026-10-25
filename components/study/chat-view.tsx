@@ -12,37 +12,38 @@ import { patchConfig } from '@/lib/client/config'
 import { useConfig, useConversation } from '@/lib/client/hooks'
 import { saveTextAsNote } from '@/lib/client/notes'
 import { TabLink } from '@/lib/client/tabs'
-import { PROVIDER_META } from '@/lib/shared/providers'
+import { findSlot, providerLabel } from '@/lib/shared/providers'
 import { SKILLS, type SkillMeta } from '@/lib/shared/skills'
-import { PROVIDER_IDS, type AppConfig, type ProviderId } from '@/lib/shared/types'
+import type { AppConfig, ProviderId } from '@/lib/shared/types'
 import { AUTO_SKILL, ChatComposer } from './chat-composer'
 import { AssistantMessage, PendingReply, UserMessage } from './chat-message'
 import styles from './chat.module.css'
 
 function ModelPicker({ value, config, onChange }: { value: ProviderId; config?: AppConfig; onChange: (id: ProviderId) => void }) {
-  const Mark = () => <ProviderMark provider={value} />
+  const slots = config?.providers ?? []
+  const current = findSlot(slots, value)
+  const Mark = () => <ProviderMark provider={value} label={current?.label} />
+  const detail = (slot: (typeof slots)[number]) => {
+    if (!slot.enabled) return '已停用'
+    if (slot.connection === 'cli') return slot.command || '未填写命令'
+    return slot.model || '未填写模型'
+  }
   return (
     <ActionMenu>
-      <ActionMenu.Button size="small" leadingVisual={Mark}>
-        {PROVIDER_META[value].label}
+      <ActionMenu.Button size="small" leadingVisual={Mark} disabled={slots.length === 0}>
+        {slots.length ? providerLabel(value, slots) : '未配置模型'}
       </ActionMenu.Button>
       <ActionMenu.Overlay width="medium" align="end">
         <ActionList selectionVariant="single" aria-label="选择导师使用的模型">
-          {PROVIDER_IDS.map((id) => {
-            const provider = config?.providers[id]
-            const enabled = provider?.enabled ?? true
-            return (
-              <ActionList.Item key={id} selected={id === value} disabled={!enabled} onSelect={() => onChange(id)}>
-                <ActionList.LeadingVisual>
-                  <ProviderMark provider={id} />
-                </ActionList.LeadingVisual>
-                {PROVIDER_META[id].label}
-                <ActionList.Description variant="block">
-                  {enabled ? provider?.model || '未填写模型' : '已停用'}
-                </ActionList.Description>
-              </ActionList.Item>
-            )
-          })}
+          {slots.map((slot) => (
+            <ActionList.Item key={slot.id} selected={slot.id === value} disabled={!slot.enabled} onSelect={() => onChange(slot.id)}>
+              <ActionList.LeadingVisual>
+                <ProviderMark provider={slot.id} label={slot.label} />
+              </ActionList.LeadingVisual>
+              {slot.label}
+              <ActionList.Description variant="block">{detail(slot)}</ActionList.Description>
+            </ActionList.Item>
+          ))}
         </ActionList>
       </ActionMenu.Overlay>
     </ActionMenu>
@@ -83,7 +84,7 @@ export function ChatView({ conversationId, initialAttachment = null }: ChatViewP
   const run = runs.find((item) => (conversationId ? item.conversationId === conversationId : item.runId === ownRunId))
   const busy = Boolean(run && isRunActive(run))
   const [providerChoice, setProviderChoice] = useState<ProviderId | null>(null)
-  const provider = providerChoice ?? config?.study.provider ?? 'chatgpt'
+  const provider = providerChoice ?? config?.study.provider ?? config?.providers[0]?.id ?? ''
   const [skill, setSkill] = useState(AUTO_SKILL)
   const [draft, setDraft] = useState('')
   const [attachment, setAttachment] = useState<string | null>(initialAttachment)
@@ -130,8 +131,13 @@ export function ChatView({ conversationId, initialAttachment = null }: ChatViewP
   const send = () => {
     const message = draft.trim()
     if (!message || busy) return
-    if (config && !config.providers[provider].enabled) {
-      notify({ variant: 'warning', text: `${PROVIDER_META[provider].label} 已停用，请换一个模型。` })
+    const slot = findSlot(config?.providers, provider)
+    if (!slot) {
+      notify({ variant: 'warning', text: '还没有可用的模型。请先到设置里添加槽位。' })
+      return
+    }
+    if (!slot.enabled) {
+      notify({ variant: 'warning', text: `${slot.label} 已停用，请换一个模型。` })
       return
     }
     stickToBottom.current = true

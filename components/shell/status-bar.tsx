@@ -7,7 +7,7 @@ import { providerReady } from '@/lib/client/config'
 import { useConfig, useLibrary } from '@/lib/client/hooks'
 import { useStatusItems } from '@/lib/client/status-bar'
 import { TabLink } from '@/lib/client/tabs'
-import { PROVIDER_META } from '@/lib/shared/providers'
+import { findSlot, providerLabel } from '@/lib/shared/providers'
 import type { AppMode } from '@/lib/shared/types'
 import styles from './shell.module.css'
 
@@ -43,8 +43,10 @@ function LibraryStatus() {
 export function StatusBar({ mode }: { mode: AppMode }) {
   const items = useStatusItems()
   const { data: config } = useConfig()
-  const provider = config?.study.provider ?? 'chatgpt'
+  const provider = config?.study.provider ?? ''
+  const slot = findSlot(config?.providers, provider)
   const ready = providerReady(config, provider)
+  const detail = slot ? (slot.connection === 'cli' ? slot.model || slot.command : slot.model) : ''
 
   return (
     <footer className={styles.statusBar} aria-label="状态栏">
@@ -61,7 +63,7 @@ export function StatusBar({ mode }: { mode: AppMode }) {
           <Link href="/settings" className={styles.statusLink} data-tone={ready ? undefined : 'attention'}>
             <DotFillIcon size={12} className={styles.statusDot} />
             <span className={styles.statusText}>
-              {ready ? `${PROVIDER_META[provider].label} · ${config.providers[provider].model}` : 'AI 未连接'}
+              {ready ? `${providerLabel(provider, config.providers)} · ${detail}` : 'AI 未连接'}
             </span>
           </Link>
         ) : null}

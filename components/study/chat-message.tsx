@@ -12,7 +12,8 @@ import { paperHref } from '@/lib/client/library'
 import { TabLink } from '@/lib/client/tabs'
 import { baseName } from '@/lib/client/vault'
 import { displayName } from '@/lib/shared/mindmap'
-import { PROVIDER_META } from '@/lib/shared/providers'
+import { useConfig } from '@/lib/client/hooks'
+import { providerLabel } from '@/lib/shared/providers'
 import { skillMeta } from '@/lib/shared/skills'
 import type { ChatMessage, ChatSource, ProviderId } from '@/lib/shared/types'
 import styles from './chat.module.css'
@@ -55,10 +56,12 @@ function ReplyHeader({
   durationMs?: number
 }) {
   const method = skillMeta(skill)
+  const { data: config } = useConfig()
+  const name = provider ? providerLabel(provider, config?.providers) : '导师'
   return (
     <div className={styles.assistantHeader}>
-      {provider ? <ProviderMark provider={provider} /> : null}
-      <span className={styles.assistantName}>{provider ? PROVIDER_META[provider].label : '导师'}</span>
+      {provider ? <ProviderMark provider={provider} label={name} /> : null}
+      <span className={styles.assistantName}>{name}</span>
       {model ? <span className={styles.model}>{model}</span> : null}
       {method ? <Label variant="accent">{method.title}</Label> : null}
       {durationMs ? <span>{formatDuration(durationMs)}</span> : null}

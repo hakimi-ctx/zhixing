@@ -1,14 +1,14 @@
 import 'server-only'
-import { PROVIDER_META } from '@/lib/shared/providers'
-import {
-  PROVIDER_IDS,
-  type AppConfig,
-  type ProviderId,
-  type WorkAttempt,
-  type WorkLogEntry,
-  type WorkSession,
-  type WorkStage,
-  type WorkSubtask,
+import { findSlot, providerLabel, providerStrength } from '@/lib/shared/providers'
+import type {
+  AiSlot,
+  AppConfig,
+  ProviderId,
+  WorkAttempt,
+  WorkLogEntry,
+  WorkSession,
+  WorkStage,
+  WorkSubtask,
 } from '@/lib/shared/types'
 import { loadConfig, providerReady } from './config'
 import { titleFrom } from './conversations'
@@ -32,14 +32,16 @@ interface Run {
   callLimit: number
 }
 
-const label = (id: ProviderId) => PROVIDER_META[id].label
+function label(config: AppConfig, id: ProviderId): string {
+  return providerLabel(id, config.providers)
+}
 
 const SUPERVISOR_SYSTEM = [
   '你是一个 AI 团队的主管，负责拆解用户的任务、分派给下属、验收交付，并汇总成最终方案。团队是上下级关系：',
   '- 只有你负责拆解任务和做决定；下属只完成你分给他的那一块，不会重复思考整个问题。',
   '- 子任务必须边界清楚、互不重叠，并写明交付物，避免重复劳动和来回空转。',
   '- 一步就能完成的事不要拆，子任务宁少勿多。',
-  '- 你通过 API 被调用，看不到用户电脑上的文件，也不能运行命令；需要动手落地的部分，最后会交给执行器完成。',
+  '- 你只返回文字，看不到用户电脑上的文件，也不能运行命令；需要动手落地的部分，最后会交给执行器完成。',
   '- 默认用简体中文。',
 ].join('\n')
 
@@ -47,7 +49,7 @@ const WORKER_SYSTEM = [
   '你是一个 AI 团队的成员，直属主管给你分配了一个明确的子任务。规则：',
   '- 只完成分配给你的这一块，不要重新规划整个任务，也不要重做其他成员负责的部分。',
   '- 直接交付成果本身（用 Markdown），不要写“好的，我来……”之类的开场白，也不要反问；信息不足时做合理假设，并在末尾用一两句话注明。',
-  '- 你通过 API 被调用，看不到用户电脑上的文件，也不能运行命令。',
+  '- 你只返回文字，看不到用户电脑上的文件，也不能运行命令。',
   '- 默认用简体中文。',
 ].join('\n')
 
@@ -151,16 +153,21 @@ async function ask(
           touch(run.entry)
         }
       : undefined,
-    onStatus: (status) => log(run.entry, 'info', `${label(provider)}：${status}`),
+    onStatus: (status) => log(run.entry, 'info', `${label(run.config, provider)}：${status}`),
   })
   const text = result.text.trim()
-  if (!text) throw new Error(`${label(provider)} 返回了空内容。`)
+  if (!text) throw new Error(`${label(run.config, provider)} 返回了空内容。`)
   return { text, model: result.model }
 }
 
-function teamLines(session: WorkSession): string {
+function teamLines(session: WorkSession, config: AppConfig): string {
   return [session.supervisor, ...session.workers]
-    .map((id) => `- ${id}（${label(id)}）：擅长${PROVIDER_META[id].strengths}${id === session.supervisor ? '（这是你自己，主管）' : ''}`)
+    .map((id) => {
+      const slot = findSlot(config.providers, id)
+      const strengths = slot ? providerStrength(slot) : '自定义模型'
+      const name = label(config, id)
+      return `- ${id}（${name}）：擅长${strengths}${id === session.supervisor ? '（这是你自己，主管）' : ''}`
+    })
     .join('\n')
 }
 
@@ -168,7 +175,7 @@ function assignable(session: WorkSession): ProviderId[] {
   return session.workers.length ? session.workers : [session.supervisor]
 }
 
-const ALIASES: Record<string, ProviderId> = {
+const ALIASES: Record<string, string> = {
   chatgpt: 'chatgpt',
   gpt: 'chatgpt',
   openai: 'chatgpt',
@@ -179,17 +186,34 @@ const ALIASES: Record<string, ProviderId> = {
   google: 'gemini',
 }
 
-function normalizeAssignee(raw: string, allowed: ProviderId[], index: number): ProviderId {
-  const key = raw.toLowerCase().replace(/[^a-z]/g, '')
-  const match = Object.entries(ALIASES).find(([alias]) => key.includes(alias))?.[1]
-  return match && allowed.includes(match) ? match : allowed[index % allowed.length]
+function normalizeAssignee(raw: string, allowed: ProviderId[], providers: AiSlot[], index: number): ProviderId {
+  const trimmed = raw.trim()
+  if (allowed.includes(trimmed)) return trimmed
+  const lower = trimmed.toLowerCase()
+  const byId = allowed.find((id) => id.toLowerCase() === lower)
+  if (byId) return byId
+  const byLabel = allowed.find((id) => findSlot(providers, id)?.label.toLowerCase() === lower)
+  if (byLabel) return byLabel
+  const key = lower.replace(/[^a-z0-9]/g, '')
+  for (const [alias, id] of Object.entries(ALIASES)) {
+    if (key.includes(alias) && allowed.includes(id)) return id
+  }
+  if (key.length >= 3) {
+    const byContains = allowed.find((id) => {
+      const slot = findSlot(providers, id)
+      const labelKey = (slot?.label ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+      return (labelKey.length >= 3 && (key.includes(labelKey) || labelKey.includes(key))) || key.includes(id.toLowerCase())
+    })
+    if (byContains) return byContains
+  }
+  return allowed[index % allowed.length]
 }
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function parsePlan(raw: string, session: WorkSession): { analysis: string; subtasks: WorkSubtask[] } | null {
+function parsePlan(raw: string, session: WorkSession, providers: AiSlot[]): { analysis: string; subtasks: WorkSubtask[] } | null {
   let data: unknown
   try {
     data = extractJsonObject(raw)
@@ -213,7 +237,7 @@ function parsePlan(raw: string, session: WorkSession): { analysis: string; subta
     subtasks.push({
       id: `t${subtasks.length + 1}`,
       title,
-      assignee: normalizeAssignee(text(fields.assignee), allowed, subtasks.length),
+      assignee: normalizeAssignee(text(fields.assignee), allowed, providers, subtasks.length),
       instructions: instructions.slice(0, 6000),
       deliverable: text(fields.deliverable).slice(0, 2000) || '按要求完成的成果',
       attempts: [],
@@ -222,11 +246,12 @@ function parsePlan(raw: string, session: WorkSession): { analysis: string; subta
   return { analysis: text(record.analysis) || '（主管没有写分析）', subtasks }
 }
 
-function planPrompt(session: WorkSession): string {
+function planPrompt(session: WorkSession, config: AppConfig): string {
   const ids = assignable(session).join(' / ')
+  const example = assignable(session)[0] ?? session.supervisor
   return [
     `## 用户的任务\n${session.task}`,
-    `## 你的团队\n${teamLines(session)}`,
+    `## 你的团队\n${teamLines(session, config)}`,
     [
       '## 你要做的',
       '1. 用 2～5 句话分析任务：目标是什么、关键难点在哪、最终要交付什么。',
@@ -234,7 +259,7 @@ function planPrompt(session: WorkSession): string {
       '3. 如果任务很简单、不需要分工，subtasks 填空数组，你会在最后一步直接给出方案。',
       '',
       '只输出一个 JSON 对象，不要输出任何其他文字：',
-      '{"analysis":"……","subtasks":[{"title":"不超过 20 个字的标题","assignee":"claude","instructions":"……","deliverable":"……"}]}',
+      `{"analysis":"……","subtasks":[{"title":"不超过 20 个字的标题","assignee":"${example}","instructions":"……","deliverable":"……"}]}`,
     ].join('\n'),
   ].join('\n\n')
 }
@@ -251,7 +276,7 @@ async function planPhase(run: Run) {
   stage.analysis = ''
   touch(entry)
 
-  const request: ModelRequest = { system: SUPERVISOR_SYSTEM, messages: [{ role: 'user', content: planPrompt(session) }] }
+  const request: ModelRequest = { system: SUPERVISOR_SYSTEM, messages: [{ role: 'user', content: planPrompt(session, run.config) }] }
   let parsed: ReturnType<typeof parsePlan> = null
   let previous = ''
   for (let round = 0; round < 2 && !parsed; round += 1) {
@@ -270,7 +295,7 @@ async function planPhase(run: Run) {
     stage.model = reply.model
     stage.output = reply.text
     previous = reply.text
-    parsed = parsePlan(reply.text, session)
+    parsed = parsePlan(reply.text, session, run.config.providers)
     if (!parsed) log(entry, 'warn', round === 0 ? '主管返回的拆解格式不对，请它重新输出一次。' : '主管第二次返回的格式仍然不对。')
   }
   if (!parsed) throw new Error('主管没能给出有效的任务拆解。可以点“继续”重试，或到设置里换一个主管模型。')
@@ -282,14 +307,14 @@ async function planPhase(run: Run) {
     entry,
     'info',
     parsed.subtasks.length
-      ? `主管把任务拆成 ${parsed.subtasks.length} 个子任务：${parsed.subtasks.map((item) => `${item.title}（${label(item.assignee)}）`).join('；')}。`
+      ? `主管把任务拆成 ${parsed.subtasks.length} 个子任务：${parsed.subtasks.map((item) => `${item.title}（${label(run.config, item.assignee)}）`).join('；')}。`
       : '主管判断这个任务不需要分工，将直接给出方案。',
   )
 }
 
-function workerRequest(session: WorkSession, subtask: WorkSubtask, feedback: string | undefined): ModelRequest {
+function workerRequest(session: WorkSession, subtask: WorkSubtask, feedback: string | undefined, config: AppConfig): ModelRequest {
   const outline = session.subtasks
-    .map((item, index) => `${index + 1}. ${item.title}（${label(item.assignee)}）${item.id === subtask.id ? '  ← 你负责这一项' : ''}`)
+    .map((item, index) => `${index + 1}. ${item.title}（${label(config, item.assignee)}）${item.id === subtask.id ? '  ← 你负责这一项' : ''}`)
     .join('\n')
   const parts = [
     `## 团队的总任务\n${session.task}`,
@@ -307,7 +332,7 @@ function workerRequest(session: WorkSession, subtask: WorkSubtask, feedback: str
     .filter((item) => item.id !== subtask.id)
     .map((item) => ({ item, output: deliveredOutput(item) }))
     .filter(({ output }) => output)
-    .map(({ item, output }) => `### ${item.title}（${label(item.assignee)} 负责）\n${clip(output, 5000)}`)
+    .map(({ item, output }) => `### ${item.title}（${label(config, item.assignee)} 负责）\n${clip(output, 5000)}`)
   return {
     system: WORKER_SYSTEM,
     reference: others.length ? `其他成员已经完成的部分（只用来对齐口径、避免重复，不要重做）：\n\n${others.join('\n\n')}` : undefined,
@@ -341,7 +366,7 @@ async function attemptOnce(
     record.status = 'failed'
     record.error = errorMessage(error)
     record.endedAt = Date.now()
-    log(run.entry, 'warn', `${label(by)} 没能完成“${subtask.title}”：${record.error}`)
+    log(run.entry, 'warn', `${label(run.config, by)} 没能完成“${subtask.title}”：${record.error}`)
     return false
   }
 }
@@ -352,13 +377,13 @@ async function attemptOnce(
  */
 async function deliver(run: Run, subtask: WorkSubtask, feedback?: string) {
   const session = run.entry.session
-  const request = workerRequest(session, subtask, feedback)
-  const takeoverNote = `${label(subtask.assignee)} 调用失败，由主管接手`
+  const request = workerRequest(session, subtask, feedback, run.config)
+  const takeoverNote = `${label(run.config, subtask.assignee)} 调用失败，由主管接手`
   const owner = latestDelivery(subtask)?.by ?? subtask.assignee
   const ownerNote = owner === subtask.assignee ? undefined : takeoverNote
   if (await attemptOnce(run, subtask, owner, request, feedback, ownerNote)) return
   if (owner !== session.supervisor) {
-    log(run.entry, 'warn', `改由主管 ${label(session.supervisor)} 接手“${subtask.title}”。`)
+    log(run.entry, 'warn', `改由主管 ${label(run.config, session.supervisor)} 接手“${subtask.title}”。`)
     if (await attemptOnce(run, subtask, session.supervisor, request, feedback, takeoverNote)) return
   }
   throw new Error(`子任务“${subtask.title}”没有完成：${lastAttempt(subtask)?.error ?? '未知错误'}`)
@@ -375,11 +400,11 @@ async function executePhase(run: Run) {
   }
 }
 
-function reviewRequest(session: WorkSession, remaining: number): ModelRequest {
+function reviewRequest(session: WorkSession, remaining: number, config: AppConfig): ModelRequest {
   const delivered = session.subtasks
     .map(
       (item) =>
-        `### 子任务 ${item.id}：${item.title}（${label(item.assignee)} 负责）\n交付要求：${item.deliverable}\n\n${clip(deliveredOutput(item), 8000) || '（没有交付）'}`,
+        `### 子任务 ${item.id}：${item.title}（${label(config, item.assignee)} 负责）\n交付要求：${item.deliverable}\n\n${clip(deliveredOutput(item), 8000) || '（没有交付）'}`,
     )
     .join('\n\n')
   return {
@@ -459,7 +484,7 @@ async function reviewPhase(run: Run) {
     review.decision = undefined
     review.requested = undefined
     touch(entry)
-    const reply = await ask(run, session.supervisor, reviewRequest(session, max - round))
+    const reply = await ask(run, session.supervisor, reviewRequest(session, max - round, run.config))
     review.model = reply.model
     review.output = reply.text
     const requests = parseReview(reply.text, session)
@@ -487,9 +512,9 @@ async function reviewPhase(run: Run) {
   }
 }
 
-function finalRequest(session: WorkSession): ModelRequest {
+function finalRequest(session: WorkSession, config: AppConfig): ModelRequest {
   const delivered = session.subtasks.map(
-    (item, index) => `### ${index + 1}. ${item.title}（${label(item.assignee)} 完成）\n${clip(deliveredOutput(item), 9000) || '（没有交付）'}`,
+    (item, index) => `### ${index + 1}. ${item.title}（${label(config, item.assignee)} 完成）\n${clip(deliveredOutput(item), 9000) || '（没有交付）'}`,
   )
   const parts = [`## 用户的任务\n${session.task}`, `## 你当初的分析\n${session.plan.analysis}`]
   if (delivered.length) parts.push(`## 团队的交付\n${delivered.join('\n\n')}`)
@@ -515,7 +540,7 @@ async function finalPhase(run: Run) {
   const stage = session.final
   begin(stage)
   touch(entry)
-  const reply = await ask(run, session.supervisor, finalRequest(session), (value) => {
+  const reply = await ask(run, session.supervisor, finalRequest(session, run.config), (value) => {
     stage.output = value
   })
   stage.output = reply.text
@@ -563,8 +588,8 @@ function launch(session: WorkSession, config: AppConfig, note: string) {
 
 export async function createWorkSession(task: string): Promise<WorkSession> {
   const config = await loadConfig()
-  const enabled = PROVIDER_IDS.filter((id) => providerReady(config, id))
-  if (!enabled.length) throw new HttpError(400, '还没有可用的模型。请先到设置里接入中转站并填好模型名。')
+  const enabled = config.providers.filter((slot) => providerReady(config, slot.id)).map((slot) => slot.id)
+  if (!enabled.length) throw new HttpError(400, '还没有可用的模型。请先到设置里添加槽位：API 要填中转站和模型名，CLI 要填命令。')
   const supervisor = enabled.includes(config.work.supervisor) ? config.work.supervisor : enabled[0]
   const workers = enabled.filter((id) => id !== supervisor)
   const now = Date.now()
@@ -589,11 +614,13 @@ export async function createWorkSession(task: string): Promise<WorkSession> {
   }
   await workSessions.save(session)
   const swapped =
-    supervisor !== config.work.supervisor ? `（设置里的主管 ${label(config.work.supervisor)} 还不可用，临时由 ${label(supervisor)} 担任）` : ''
+    supervisor !== config.work.supervisor
+      ? `（设置里的主管 ${label(config, config.work.supervisor)} 还不可用，临时由 ${label(config, supervisor)} 担任）`
+      : ''
   launch(
     session,
     config,
-    `任务开始。主管：${label(supervisor)}${swapped}；成员：${workers.map(label).join('、') || '无，由主管独自完成'}。`,
+    `任务开始。主管：${label(config, supervisor)}${swapped}；成员：${workers.map((id) => label(config, id)).join('、') || '无，由主管独自完成'}。`,
   )
   return session
 }

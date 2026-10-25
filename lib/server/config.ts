@@ -2,12 +2,16 @@ import 'server-only'
 import path from 'node:path'
 import { z } from 'zod'
 import { EXECUTOR_PRESETS, executorFromPreset } from '@/lib/shared/executors'
+import { LEGACY_PROVIDER_META } from '@/lib/shared/providers'
 import {
   EXECUTOR_KINDS,
-  PROVIDER_IDS,
+  LEGACY_PROVIDER_IDS,
+  MAX_AI_SLOTS,
+  type AiSlot,
   type AppConfig,
+  type ConnectionMode,
   type ExecutorConfig,
-  type ProviderConfig,
+  type LegacyProviderId,
   type ProviderId,
 } from '@/lib/shared/types'
 import { expandHome, paths } from './paths'
@@ -17,17 +21,34 @@ export const KEY_MASK = '••••'
 const PROXY_PATTERN = /^https?:\/\/[^\s/?#]+\/?$/i
 const URL_PATTERN = /^https?:\/\/[^\s]+$/i
 
-function defaultProvider(): ProviderConfig {
-  return { enabled: true, model: '', baseUrl: '', apiKey: '' }
+const SLOT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+
+function emptySlot(id: string, label: string): AiSlot {
+  return {
+    id,
+    label,
+    enabled: true,
+    connection: 'api',
+    model: '',
+    baseUrl: '',
+    apiKey: '',
+    command: '',
+    args: '',
+    note: '',
+  }
+}
+
+function defaultSlots(): AiSlot[] {
+  return LEGACY_PROVIDER_IDS.map((id) => emptySlot(id, LEGACY_PROVIDER_META[id].label))
 }
 
 export function defaultConfig(): AppConfig {
   return {
-    version: 2,
+    version: 3,
     vaultPath: paths.defaultVault(),
     proxy: '',
     relay: { baseUrl: '', apiKey: '' },
-    providers: { chatgpt: defaultProvider(), claude: defaultProvider(), gemini: defaultProvider() },
+    providers: defaultSlots(),
     study: { provider: 'claude', model: '', baseUrl: '', apiKey: '' },
     work: { supervisor: 'chatgpt', maxSubtasks: 4, maxRevisions: 1, callTimeoutSec: 600 },
     executors: EXECUTOR_KINDS.map((kind) => executorFromPreset(kind)),
@@ -49,7 +70,14 @@ const cleanUrl = (value: unknown) => {
   return URL_PATTERN.test(url) ? url : ''
 }
 
-function normalizeProvider(raw: unknown): ProviderConfig {
+interface LegacyProviderFields {
+  enabled: boolean
+  model: string
+  baseUrl: string
+  apiKey: string
+}
+
+function normalizeLegacyProvider(raw: unknown): LegacyProviderFields {
   const value = asObject(raw)
   // Version 1 kept the OpenAI-compatible settings under `api`; their values carry over.
   const legacy = asObject(value.api)
@@ -59,6 +87,85 @@ function normalizeProvider(raw: unknown): ProviderConfig {
     baseUrl: cleanUrl(value.baseUrl) || cleanUrl(legacy.baseUrl),
     apiKey: asString(value.apiKey) || asString(legacy.apiKey),
   }
+}
+
+function normalizeSlot(raw: unknown): AiSlot | null {
+  const value = asObject(raw)
+  const id = asString(value.id)
+  if (!SLOT_ID.test(id)) return null
+  const connection: ConnectionMode = value.connection === 'cli' ? 'cli' : 'api'
+  const label = asString(value.label).slice(0, 40) || LEGACY_PROVIDER_META[id as LegacyProviderId]?.label || id
+  const args = typeof value.args === 'string' ? value.args.slice(0, 2000) : ''
+  return {
+    id,
+    label,
+    enabled: asBool(value.enabled, true),
+    connection,
+    model: asString(value.model).slice(0, 200),
+    baseUrl: cleanUrl(value.baseUrl),
+    apiKey: asString(value.apiKey).slice(0, 1000),
+    command: asString(value.command).slice(0, 500),
+    args,
+    note: asString(value.note).slice(0, 200),
+  }
+}
+
+/** Version 1–2 stored `providers` as `{ chatgpt, claude, gemini }`. Those ids stay stable. */
+function slotsFromLegacyRecord(providersRaw: Loose, version: unknown, relay: { baseUrl: string; apiKey: string }): {
+  slots: AiSlot[]
+  relay: { baseUrl: string; apiKey: string }
+} {
+  const legacy = Object.fromEntries(LEGACY_PROVIDER_IDS.map((id) => [id, normalizeLegacyProvider(providersRaw[id])])) as Record<
+    LegacyProviderId,
+    LegacyProviderFields
+  >
+  let relayConfig = relay
+  if (!relayConfig.baseUrl && version !== 2 && version !== 3) {
+    const first = LEGACY_PROVIDER_IDS.map((id) => legacy[id]).find((item) => item.baseUrl && item.apiKey)
+    if (first) {
+      relayConfig = { baseUrl: first.baseUrl, apiKey: first.apiKey }
+      for (const id of LEGACY_PROVIDER_IDS) {
+        if (legacy[id].baseUrl === first.baseUrl && legacy[id].apiKey === first.apiKey) {
+          legacy[id] = { ...legacy[id], baseUrl: '', apiKey: '' }
+        }
+      }
+    }
+  }
+  return {
+    relay: relayConfig,
+    slots: LEGACY_PROVIDER_IDS.map((id) => ({
+      ...emptySlot(id, LEGACY_PROVIDER_META[id].label),
+      enabled: legacy[id].enabled,
+      model: legacy[id].model,
+      baseUrl: legacy[id].baseUrl,
+      apiKey: legacy[id].apiKey,
+    })),
+  }
+}
+
+function normalizeSlots(raw: unknown, version: unknown, relay: { baseUrl: string; apiKey: string }): {
+  slots: AiSlot[]
+  relay: { baseUrl: string; apiKey: string }
+} {
+  if (Array.isArray(raw)) {
+    const seen = new Set<string>()
+    const slots: AiSlot[] = []
+    for (const item of raw) {
+      const slot = normalizeSlot(item)
+      if (!slot || seen.has(slot.id)) continue
+      seen.add(slot.id)
+      slots.push(slot)
+      if (slots.length >= MAX_AI_SLOTS) break
+    }
+    return { slots, relay }
+  }
+  return slotsFromLegacyRecord(asObject(raw), version, relay)
+}
+
+function pickSlot(ids: string[], wanted: string, preferred: string): string {
+  if (wanted && ids.includes(wanted)) return wanted
+  if (preferred && ids.includes(preferred)) return preferred
+  return ids[0] ?? ''
 }
 
 /** The old WorkBuddy argument template; still valid, but the documented headless flags are clearer. */
@@ -85,44 +192,30 @@ function normalizeExecutors(raw: unknown): ExecutorConfig[] {
 export function normalizeConfig(raw: unknown): AppConfig {
   const fallback = defaultConfig()
   const value = asObject(raw)
-  const providersRaw = asObject(value.providers)
   const work = asObject(value.work)
   const study = asObject(value.study)
   const relay = asObject(value.relay)
   const vaultPath = asString(value.vaultPath)
   const proxy = asString(value.proxy)
-  const providers = {
-    chatgpt: normalizeProvider(providersRaw.chatgpt),
-    claude: normalizeProvider(providersRaw.claude),
-    gemini: normalizeProvider(providersRaw.gemini),
-  }
-  let relayConfig = { baseUrl: cleanUrl(relay.baseUrl), apiKey: asString(relay.apiKey) }
-  // Migrating from version 1: the first per-model API becomes the shared relay.
-  if (!relayConfig.baseUrl && value.version !== 2) {
-    const first = PROVIDER_IDS.map((id) => providers[id]).find((item) => item.baseUrl && item.apiKey)
-    if (first) {
-      relayConfig = { baseUrl: first.baseUrl, apiKey: first.apiKey }
-      for (const id of PROVIDER_IDS) {
-        if (providers[id].baseUrl === first.baseUrl && providers[id].apiKey === first.apiKey) {
-          providers[id] = { ...providers[id], baseUrl: '', apiKey: '' }
-        }
-      }
-    }
-  }
+  const migrated = normalizeSlots(value.providers, value.version, {
+    baseUrl: cleanUrl(relay.baseUrl),
+    apiKey: asString(relay.apiKey),
+  })
+  const ids = migrated.slots.map((slot) => slot.id)
   return {
-    version: 2,
+    version: 3,
     vaultPath: vaultPath && path.isAbsolute(expandHome(vaultPath)) ? vaultPath : fallback.vaultPath,
     proxy: PROXY_PATTERN.test(proxy) ? proxy : '',
-    relay: relayConfig,
-    providers,
+    relay: migrated.relay,
+    providers: migrated.slots,
     study: {
-      provider: oneOf(study.provider, PROVIDER_IDS, fallback.study.provider),
+      provider: pickSlot(ids, asString(study.provider), fallback.study.provider),
       model: asString(study.model),
       baseUrl: cleanUrl(study.baseUrl),
       apiKey: asString(study.apiKey),
     },
     work: {
-      supervisor: oneOf(work.supervisor, PROVIDER_IDS, fallback.work.supervisor),
+      supervisor: pickSlot(ids, asString(work.supervisor), fallback.work.supervisor),
       maxSubtasks: asInt(work.maxSubtasks, fallback.work.maxSubtasks, 1, 6),
       maxRevisions: asInt(work.maxRevisions, fallback.work.maxRevisions, 0, 2),
       callTimeoutSec: asInt(work.callTimeoutSec, fallback.work.callTimeoutSec, 60, 3600),
@@ -135,7 +228,17 @@ export async function loadConfig(): Promise<AppConfig> {
   return normalizeConfig(await readJson<unknown>(paths.config()))
 }
 
-const providerIdEnum = z.enum(['chatgpt', 'claude', 'gemini'])
+const slotIdField = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(SLOT_ID, '槽位 id 只能包含字母、数字、下划线和连字符')
+const slotIdOrEmpty = z
+  .string()
+  .trim()
+  .max(64)
+  .refine((value) => value === '' || SLOT_ID.test(value), '槽位 id 只能包含字母、数字、下划线和连字符')
 const urlField = z
   .string()
   .trim()
@@ -143,9 +246,18 @@ const urlField = z
   .refine((value) => value === '' || URL_PATTERN.test(value), '接口地址应以 http:// 或 https:// 开头')
 const keyField = z.string().trim().max(1000)
 
-const providerPatch = z
-  .object({ enabled: z.boolean(), model: z.string().trim().max(200), baseUrl: urlField, apiKey: keyField })
-  .partial()
+const slotPatch = z.object({
+  id: slotIdField,
+  label: z.string().trim().min(1, '请给这个槽位起个名字').max(40),
+  enabled: z.boolean(),
+  connection: z.enum(['api', 'cli']),
+  model: z.string().trim().max(200),
+  baseUrl: urlField,
+  apiKey: keyField,
+  command: z.string().trim().max(500),
+  args: z.string().max(2000),
+  note: z.string().trim().max(200),
+})
 
 const executorPatch = z.object({
   id: z.enum(['workbuddy', 'deepseek-harness']),
@@ -169,13 +281,13 @@ export const configPatchSchema = z
       .max(300)
       .refine((value) => value === '' || PROXY_PATTERN.test(value), '代理地址的格式应类似 http://127.0.0.1:7890'),
     relay: z.object({ baseUrl: urlField, apiKey: keyField }).partial(),
-    providers: z.object({ chatgpt: providerPatch, claude: providerPatch, gemini: providerPatch }).partial(),
+    providers: z.array(slotPatch).max(MAX_AI_SLOTS),
     study: z
-      .object({ provider: providerIdEnum, model: z.string().trim().max(200), baseUrl: urlField, apiKey: keyField })
+      .object({ provider: slotIdOrEmpty, model: z.string().trim().max(200), baseUrl: urlField, apiKey: keyField })
       .partial(),
     work: z
       .object({
-        supervisor: providerIdEnum,
+        supervisor: slotIdOrEmpty,
         maxSubtasks: z.number().int().min(1).max(6),
         maxRevisions: z.number().int().min(0).max(2),
         callTimeoutSec: z.number().int().min(60).max(3600),
@@ -204,15 +316,10 @@ function applyPatch(current: AppConfig, patch: ConfigPatch): AppConfig {
     next.relay.apiKey = resolveKey(patch.relay.apiKey, next.relay.apiKey)
   }
   if (patch.providers) {
-    for (const id of PROVIDER_IDS) {
-      const update = patch.providers[id]
-      if (!update) continue
-      const target = next.providers[id]
-      if (update.enabled !== undefined) target.enabled = update.enabled
-      if (update.model !== undefined) target.model = update.model
-      if (update.baseUrl !== undefined) target.baseUrl = update.baseUrl
-      target.apiKey = resolveKey(update.apiKey, target.apiKey)
-    }
+    next.providers = patch.providers.map((update) => {
+      const stored = current.providers.find((slot) => slot.id === update.id)
+      return { ...update, apiKey: resolveKey(update.apiKey, stored?.apiKey ?? '') }
+    })
   }
   if (patch.executors) {
     next.executors = next.executors.map((executor) => {
@@ -246,7 +353,7 @@ const mask = (key: string) => (key ? `${KEY_MASK}${key.slice(-4)}` : '')
 export function maskConfig(config: AppConfig): AppConfig {
   const masked: AppConfig = structuredClone(config)
   masked.relay.apiKey = mask(masked.relay.apiKey)
-  for (const id of PROVIDER_IDS) masked.providers[id].apiKey = mask(masked.providers[id].apiKey)
+  for (const slot of masked.providers) slot.apiKey = mask(slot.apiKey)
   if (masked.study.apiKey) masked.study.apiKey = mask(masked.study.apiKey)
   return masked
 }
@@ -257,9 +364,14 @@ export interface ModelRoute {
   model: string
 }
 
-/** Where a provider's calls go: its own relay when both fields are set, otherwise the shared one. */
+export function findSlot(config: AppConfig, provider: ProviderId): AiSlot | undefined {
+  return config.providers.find((slot) => slot.id === provider)
+}
+
+/** Where an API slot's calls go: its own relay when both fields are set, otherwise the shared one. */
 export function routeFor(config: AppConfig, provider: ProviderId): ModelRoute {
-  const own = config.providers[provider]
+  const own = findSlot(config, provider)
+  if (!own || own.connection !== 'api') return { baseUrl: '', apiKey: '', model: own?.model ?? '' }
   const useOwn = Boolean(own.baseUrl && own.apiKey)
   return {
     baseUrl: useOwn ? own.baseUrl : config.relay.baseUrl,
@@ -269,6 +381,9 @@ export function routeFor(config: AppConfig, provider: ProviderId): ModelRoute {
 }
 
 export function providerReady(config: AppConfig, provider: ProviderId): boolean {
+  const slot = findSlot(config, provider)
+  if (!slot?.enabled) return false
+  if (slot.connection === 'cli') return Boolean(slot.command.trim())
   const route = routeFor(config, provider)
-  return config.providers[provider].enabled && Boolean(route.baseUrl && route.apiKey && route.model)
+  return Boolean(route.baseUrl && route.apiKey && route.model)
 }
